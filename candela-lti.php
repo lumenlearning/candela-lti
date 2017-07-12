@@ -240,7 +240,11 @@ class CandelaLTI {
     $blog = (int)$wp->query_vars['blog'];
     if ( ! empty( $blog ) && ! is_user_member_of_blog( $user->ID, $blog ) ) {
       if( CandelaLTI::is_lti_user_allowed_to_subscribe($blog)){
-        add_user_to_blog( $blog, $user->ID, 'subscriber');
+        if( CandelaLTI::is_lti_role_designer_or_higher() ) {
+          add_user_to_blog( $blog, $user->ID, 'reviewer');
+        } else {
+          add_user_to_blog( $blog, $user->ID, 'subscriber');
+        }
         CandelaLTI::record_new_register($user, $blog);
       }
     }
@@ -269,8 +273,7 @@ class CandelaLTI {
    * @param $blog
    */
   public static function is_lti_user_allowed_to_subscribe($blog){
-    $role = CandelaLTI::highest_lti_context_role();
-    if( $role == 'admin' || $role == 'teacher' ) {
+    if( CandelaLTI::is_lti_role_designer_or_higher() ) {
       return true;
     } else {
       // Switch to the target blog to get the correct option value
@@ -304,7 +307,11 @@ class CandelaLTI {
       $user_id = wp_create_user( $username, $password, CandelaLTI::default_lti_email($username) );
 
       $user = new WP_User( $user_id );
-      $user->set_role( 'subscriber' );
+      if( CandelaLTI::is_lti_role_designer_or_higher() ) {
+        $user->set_role( 'reviewer' );
+      } else {
+        $user->set_role( 'subscriber' );
+      }
       update_user_meta( $user->ID, CANDELA_LTI_USERMETA_EXTERNAL_KEY, $_POST['user_id'] );
 
       return $user;
@@ -330,9 +337,7 @@ class CandelaLTI {
         "timestamp"=>time(),
     );
 
-    $role = CandelaLTI::highest_lti_context_role();
-
-    if ( $role == 'admin' || $role == 'teacher' ) {
+    if ( CandelaLTI::is_lti_role_designer_or_higher() ) {
       if ( !empty( $_POST['lis_person_name_given'] ) ) {
         $data['lti_first_name'] = $_POST['lis_person_name_given'];
       }
@@ -431,6 +436,11 @@ class CandelaLTI {
     else:
       return "other";
     endif;
+  }
+
+  public static function is_lti_role_designer_or_higher(){
+    $role = CandelaLTI::highest_lti_context_role();
+    return $role == 'admin' || $role == 'teacher' || $role == 'designer' ;
   }
 
   public static function find_user_by_external_id( $id ) {
