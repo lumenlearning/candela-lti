@@ -224,7 +224,8 @@ class CandelaLTI {
       $user = CandelaLTI::create_user_account( $_POST['user_id'] );
     }
 
-    CandelaLTI::update_user_if_teacher( $user );
+    $blog = (int)$wp->query_vars['blog'];
+    CandelaLTI::update_user_if_teacher( $user, $blog );
 
     // If the user is not currently logged in... authenticate as the matched account.
     if ( ! is_user_logged_in() || $logged_out ) {
@@ -237,7 +238,6 @@ class CandelaLTI {
     }
 
     // Associate the user with this blog as a subscriber if not already associated.
-    $blog = (int)$wp->query_vars['blog'];
     if ( ! empty( $blog ) && ! is_user_member_of_blog( $user->ID, $blog ) ) {
       if( CandelaLTI::is_lti_user_allowed_to_subscribe($blog)){
         if( CandelaLTI::is_lti_role_designer_or_higher() ) {
@@ -360,33 +360,64 @@ class CandelaLTI {
   }
 
   /**
+   * Update teachers to set their name if not previously set
+   * and update their role to "reviewer" if subscriber
+   * @param $user
+   *
+   */
+  public static function update_user_if_teacher( $user, $blog ) {
+    $role = CandelaLTI::highest_lti_context_role();
+
+    if( $role == 'admin' || $role == 'teacher' ){
+      CandelaLTI::update_teacher_username($user, $role);
+      CandelaLTI::update_teacher_to_reviewer($user, $role, $blog);
+    }
+  }
+
+  /**
    * If a user is a teacher or admin, set their first/last names
    * If their name wasn't sent, set their name as their role
    *
    * @param $user
    *
    */
-  public static function update_user_if_teacher( $user ) {
-    if( (!empty($user->last_name) || !empty($user->first_name))
-         && ($user->last_name != 'Admin' && $user->last_name != 'Instructor') ){
+  public static function update_teacher_username($user, $role) {
+    if ((!empty($user->last_name) || !empty($user->first_name))
+        && ($user->last_name != 'Admin' && $user->last_name != 'Instructor')
+    ) {
       return;
     }
 
-    $role = CandelaLTI::highest_lti_context_role();
-
-    if( $role == 'admin' || $role == 'teacher' ){
-      $userdata = ['ID' => $user->ID];
-      if( !empty($_POST['lis_person_name_family']) || !empty($_POST['lis_person_name_given']) ){
-        $userdata['last_name'] = $_POST['lis_person_name_family'];
-        $userdata['first_name'] = $_POST['lis_person_name_given'];
-      } elseif( empty($user->last_name) && empty($user->first_name) ) {
-        $userdata['last_name'] = $role == 'admin' ? 'Admin' : 'Instructor';
-      }
-
-      if( !empty($userdata['last_name']) || !empty($userdata['first_name']) ) {
-        wp_update_user($userdata);
-      }
+    $userdata = ['ID' => $user->ID];
+    if (!empty($_POST['lis_person_name_family']) || !empty($_POST['lis_person_name_given'])) {
+      $userdata['last_name'] = $_POST['lis_person_name_family'];
+      $userdata['first_name'] = $_POST['lis_person_name_given'];
+    } elseif (empty($user->last_name) && empty($user->first_name)) {
+      $userdata['last_name'] = $role == 'admin' ? 'Admin' : 'Instructor';
     }
+
+    if (!empty($userdata['last_name']) || !empty($userdata['first_name'])) {
+      wp_update_user($userdata);
+    }
+  }
+
+  /**
+   * Update user's role in given blog to "reviewer" if "subscriber"
+   *
+   * @param $user
+   *
+   */
+  public static function update_teacher_to_reviewer($user, $lti_role, $blog) {
+    $curr = get_current_blog_id();
+    switch_to_blog($blog);
+
+    if (($lti_role == 'admin' || $lti_role == 'teacher') &&
+        (count($user->roles) == 1 && $user->roles[0] == 'subscriber')
+    ) {
+      $user->set_role("reviewer");
+    }
+
+    switch_to_blog($curr);
   }
 
   /**
