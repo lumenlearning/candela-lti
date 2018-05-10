@@ -333,6 +333,7 @@ class CandelaLTI {
         "lti_context_name"=>$_POST['context_title'],
         "lti_school_id"=>$_POST['tool_consumer_instance_guid'],
         "lti_school_name"=>$_POST['tool_consumer_instance_name'],
+        "lti_key"=>$_POST['oauth_consumer_key'],
         "lti_role"=>$roles,
         "timestamp"=>time(),
     );
